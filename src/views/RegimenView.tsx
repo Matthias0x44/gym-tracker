@@ -5,7 +5,10 @@ import { db, schemeLabel } from '../db'
 import { fmtWeight } from '../format'
 
 export default function RegimenListView() {
-  const regimens = useLiveQuery(() => db.regimens.orderBy('createdAt').reverse().toArray())
+  const regimens = useLiveQuery(async () => {
+    const rows = await db.regimens.toArray()
+    return rows.sort((a, b) => b.createdAt - a.createdAt)
+  })
   const days = useLiveQuery(() => db.regimenDays.toArray())
   const [name, setName] = useState('')
 

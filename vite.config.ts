@@ -14,7 +14,7 @@ export default defineConfig(({ command }) => ({
       manifest: {
         name: 'Gym Tracker',
         short_name: 'Gym',
-        description: 'Inconsistency-friendly strength, cardio and body-weight tracking.',
+        description: 'Log working weights, build regimens, track body weight.',
         theme_color: '#0e1116',
         background_color: '#0e1116',
         display: 'standalone',

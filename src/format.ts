@@ -1,5 +1,3 @@
-import type { Exercise, SetEntry } from './db'
-
 export function relTime(ts: number): string {
   const d = Math.floor((Date.now() - ts) / 86400000)
   if (d <= 0) return 'today'
@@ -10,10 +8,7 @@ export function relTime(ts: number): string {
   return `${Math.floor(d / 365)}y ago`
 }
 
-export function fmtSet(s: SetEntry, ex?: Exercise): string {
-  if (s.weight != null) {
-    const u = ex?.unit || 'kg'
-    return s.reps != null ? `${s.weight}${u} × ${s.reps}` : `${s.weight}${u}`
-  }
-  return s.note || '—'
+export function fmtWeight(kg: number, unit = 'kg'): string {
+  const n = Number.isInteger(kg) ? String(kg) : kg.toFixed(1)
+  return `${n}${unit}`
 }

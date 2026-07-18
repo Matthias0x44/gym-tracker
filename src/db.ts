@@ -1,25 +1,36 @@
 import Dexie, { type Table } from 'dexie'
 
-export type ExerciseCategory = 'strength' | 'cardio' | 'other'
-
 export interface Exercise {
   id?: number
   name: string
-  category: ExerciseCategory
-  unit: string // 'kg' | 'lb' for strength; '' for cardio/other
-  target?: string // pinned free-text goal, e.g. "8×30/30 @ L7" or "100kg squat"
+  unit: string // 'kg' | 'lb'
   createdAt: number
-  archived: number // 0 | 1 — Dexie indexes numbers, not booleans
 }
 
-export interface SetEntry {
+/** A sets×reps prescription the user can pick for an exercise (e.g. 3×10). */
+export interface Scheme {
   id?: number
   exerciseId: number
-  date: string // local 'YYYY-MM-DD', groups a session
-  ts: number // full timestamp, orders within a day
-  weight?: number // strength
-  reps?: number // strength
-  note?: string // cardio/other free input, e.g. "30s/30s ×8 @ L7"
+  sets: number
+  reps: number
+  /** Working weight saved for this specific sets×reps selection. */
+  weight?: number
+  updatedAt?: number
+}
+
+export interface Regimen {
+  id?: number
+  name: string
+  createdAt: number
+}
+
+/** One day / session within a regimen (Push, Pull, Week A, …). */
+export interface RegimenDay {
+  id?: number
+  regimenId: number
+  name: string
+  order: number
+  exerciseIds: number[]
 }
 
 export interface BodyWeight {
@@ -29,26 +40,22 @@ export interface BodyWeight {
   kg: number
 }
 
-export interface Routine {
-  id?: number
-  name: string
-  exerciseIds: number[]
-  createdAt: number
-}
-
 class GymDB extends Dexie {
   exercises!: Table<Exercise, number>
-  sets!: Table<SetEntry, number>
+  schemes!: Table<Scheme, number>
+  regimens!: Table<Regimen, number>
+  regimenDays!: Table<RegimenDay, number>
   bodyweights!: Table<BodyWeight, number>
-  routines!: Table<Routine, number>
 
   constructor() {
-    super('gym-tracker')
+    // Fresh store for the Log / Regimen / Weight model.
+    super('gym-tracker-v2')
     this.version(1).stores({
-      exercises: '++id, name, category, archived',
-      sets: '++id, exerciseId, date, ts',
+      exercises: '++id, name',
+      schemes: '++id, exerciseId, [exerciseId+sets+reps]',
+      regimens: '++id, name',
+      regimenDays: '++id, regimenId, order',
       bodyweights: '++id, date, ts',
-      routines: '++id, name',
     })
   }
 }
@@ -60,17 +67,25 @@ export function todayISO(d = new Date()): string {
   return local.toISOString().slice(0, 10)
 }
 
+export function schemeLabel(s: Pick<Scheme, 'sets' | 'reps'>): string {
+  return `${s.sets}×${s.reps}`
+}
+
 export async function ensureSeed() {
   if ((await db.exercises.count()) > 0) return
   const now = Date.now()
-  const defaults: Omit<Exercise, 'id'>[] = [
-    { name: 'Squat', category: 'strength', unit: 'kg', createdAt: now, archived: 0 },
-    { name: 'Bench Press', category: 'strength', unit: 'kg', createdAt: now, archived: 0 },
-    { name: 'Deadlift', category: 'strength', unit: 'kg', createdAt: now, archived: 0 },
-    { name: 'Overhead Press', category: 'strength', unit: 'kg', createdAt: now, archived: 0 },
-    { name: 'Pull-up', category: 'strength', unit: 'kg', createdAt: now, archived: 0 },
-    { name: 'HIIT Cycle', category: 'cardio', unit: '', createdAt: now, archived: 0 },
-    { name: 'Run', category: 'cardio', unit: '', createdAt: now, archived: 0 },
-  ]
-  await db.exercises.bulkAdd(defaults as Exercise[])
+  const names = ['Squat', 'Bench Press', 'Deadlift', 'Overhead Press', 'Pull-up', 'Row']
+  const ids = await db.exercises.bulkAdd(
+    names.map((name) => ({ name, unit: 'kg', createdAt: now })),
+    { allKeys: true },
+  )
+  const defaultSchemes: Omit<Scheme, 'id'>[] = []
+  for (const exerciseId of ids as number[]) {
+    defaultSchemes.push(
+      { exerciseId, sets: 3, reps: 10 },
+      { exerciseId, sets: 4, reps: 8 },
+      { exerciseId, sets: 5, reps: 5 },
+    )
+  }
+  await db.schemes.bulkAdd(defaultSchemes as Scheme[])
 }

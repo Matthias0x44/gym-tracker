@@ -195,6 +195,11 @@ h2 {
   margin-top: 10px;
 }
 
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .link-btn {
   background: none;
   border: none;
@@ -561,4 +566,26 @@ select {
   font-weight: 600;
   font-size: 16px;
   flex: 1;
+}
+
+/* ---- Backup ---- */
+.backup-note {
+  margin-bottom: 8px;
+}
+
+.backup-note .card-title {
+  margin-bottom: 6px;
+}
+
+.backup-status {
+  margin: 14px 0 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.backup-help {
+  margin: 14px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
 }

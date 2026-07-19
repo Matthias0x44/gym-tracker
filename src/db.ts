@@ -47,6 +47,12 @@ export interface BodyWeight {
   kg: number
 }
 
+/**
+ * Stable IndexedDB name. Do not rename — that orphans every user's local data.
+ * Evolve with Dexie version bumps + upgrade() only (never clear tables on deploy).
+ */
+export const DB_NAME = 'gym-tracker-v2'
+
 class GymDB extends Dexie {
   exercises!: Table<Exercise, number>
   schemes!: Table<Scheme, number>
@@ -55,8 +61,7 @@ class GymDB extends Dexie {
   bodyweights!: Table<BodyWeight, number>
 
   constructor() {
-    // Fresh store for the Log / Regimen / Weight model.
-    super('gym-tracker-v2')
+    super(DB_NAME)
     this.version(1).stores({
       exercises: '++id, name',
       schemes: '++id, exerciseId, [exerciseId+sets+reps]',
@@ -64,6 +69,7 @@ class GymDB extends Dexie {
       regimenDays: '++id, regimenId, order',
       bodyweights: '++id, date, ts',
     })
+    // Additive migration only — keeps existing rows.
     this.version(2)
       .stores({
         exercises: '++id, name',

@@ -1,0 +1,25 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "gym-tracker",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-07-19",
+  "workers_dev": true,
+  "preview_urls": true,
+  "observability": {
+    "enabled": true
+  },
+  // Serves the Vite build alongside /api/* (optional; API also works alone).
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "gym-tracker",
+      "database_id": "95894494-88de-4ca7-b069-0a86d0a07ff2",
+      "migrations_dir": "migrations"
+    }
+  ]
+}

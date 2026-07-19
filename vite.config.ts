@@ -4,8 +4,8 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vite.dev/config/
 export default defineConfig(({ command }) => ({
-  // Served from a subpath on GitHub Pages in production; root in dev.
-  base: command === 'build' ? '/gym-tracker/' : '/',
+  // GitHub Pages uses /gym-tracker/; Cloudflare Worker co-hosting can set VITE_BASE=/
+  base: process.env.VITE_BASE || (command === 'build' ? '/gym-tracker/' : '/'),
   plugins: [
     react(),
     VitePWA({

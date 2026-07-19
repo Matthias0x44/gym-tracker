@@ -584,6 +584,10 @@ select {
   color: var(--accent);
 }
 
+.cloud-status {
+  margin-top: 10px;
+}
+
 .backup-help {
   margin: 14px 0 0;
   font-size: 13px;

@@ -88,6 +88,7 @@ export function RegimenDetailView() {
   const [renamingDay, setRenamingDay] = useState<number | null>(null)
   const [dayNameDraft, setDayNameDraft] = useState('')
   const [pickingFor, setPickingFor] = useState<number | null>(null)
+  const [pickQuery, setPickQuery] = useState('')
   const [newDayName, setNewDayName] = useState('')
 
   if (!regimen) return <div className="view" />
@@ -129,11 +130,21 @@ export function RegimenDetailView() {
     setRenamingDay(null)
   }
 
+  function openPicker(dayId: number) {
+    setPickQuery('')
+    setPickingFor(dayId)
+  }
+
+  function closePicker() {
+    setPickingFor(null)
+    setPickQuery('')
+  }
+
   async function addExerciseToDay(dayId: number, exerciseId: number) {
     const day = days?.find((d) => d.id === dayId)
     if (!day || day.exerciseIds.includes(exerciseId)) return
     await db.regimenDays.update(dayId, { exerciseIds: [...day.exerciseIds, exerciseId] })
-    setPickingFor(null)
+    closePicker()
   }
 
   async function removeExerciseFromDay(dayId: number, exerciseId: number) {
@@ -182,6 +193,10 @@ export function RegimenDetailView() {
 
       {(days ?? []).map((day, dayIndex) => {
         const available = (exercises ?? []).filter((e) => !day.exerciseIds.includes(e.id!))
+        const pickQ = pickQuery.trim().toLowerCase()
+        const filteredAvailable = available.filter(
+          (e) => !pickQ || e.name.toLowerCase().includes(pickQ),
+        )
         const dayCount = days?.length ?? 0
         return (
           <section className="day-block" key={day.id}>
@@ -270,29 +285,54 @@ export function RegimenDetailView() {
 
             {pickingFor === day.id ? (
               <div className="add-pick">
-                {available.map((e) => (
-                  <button
-                    key={e.id}
-                    className="btn block"
-                    type="button"
-                    onClick={() => addExerciseToDay(day.id!, e.id!)}
-                  >
-                    {e.name}
-                  </button>
-                ))}
-                {available.length === 0 && (
-                  <p className="muted">
-                    {(exercises ?? []).length === 0
-                      ? 'Add exercises in Log first.'
-                      : 'All Log exercises are already on this day.'}
+                {available.length > 0 && (
+                  <label className="field grow">
+                    <span>Search Log</span>
+                    <input
+                      type="search"
+                      value={pickQuery}
+                      onChange={(e) => setPickQuery(e.target.value)}
+                      placeholder="Filter all exercises"
+                      autoComplete="off"
+                      autoFocus
+                    />
+                  </label>
+                )}
+                {available.length > 0 && (
+                  <p className="muted add-pick-meta">
+                    {pickQ
+                      ? `${filteredAvailable.length} of ${available.length} available`
+                      : `${available.length} exercise${available.length === 1 ? '' : 's'} from Log`}
                   </p>
                 )}
-                <button className="link-btn" type="button" onClick={() => setPickingFor(null)}>
+                <div className="add-pick-list">
+                  {filteredAvailable.map((e) => (
+                    <button
+                      key={e.id}
+                      className="btn block"
+                      type="button"
+                      onClick={() => addExerciseToDay(day.id!, e.id!)}
+                    >
+                      {e.name}
+                    </button>
+                  ))}
+                  {available.length === 0 && (
+                    <p className="muted">
+                      {(exercises ?? []).length === 0
+                        ? 'Add exercises in Log first.'
+                        : 'All Log exercises are already on this day.'}
+                    </p>
+                  )}
+                  {available.length > 0 && filteredAvailable.length === 0 && (
+                    <p className="muted">No matches in your Log.</p>
+                  )}
+                </div>
+                <button className="link-btn" type="button" onClick={closePicker}>
                   Cancel
                 </button>
               </div>
             ) : (
-              <button className="btn block" type="button" onClick={() => setPickingFor(day.id!)}>
+              <button className="btn block" type="button" onClick={() => openPicker(day.id!)}>
                 + Add exercise
               </button>
             )}

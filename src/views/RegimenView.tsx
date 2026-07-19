@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db, schemeLabel } from '../db'
+import { db, schemeLabel, sortSchemes, type DayExercise, type Scheme } from '../db'
 import { fmtWeight } from '../format'
 
 export default function RegimenListView() {
@@ -26,7 +26,7 @@ export default function RegimenListView() {
       regimenId: id,
       name: 'Day 1',
       order: 0,
-      exerciseIds: [],
+      exercises: [],
     })
     setName('')
   }
@@ -73,6 +73,59 @@ export default function RegimenListView() {
   )
 }
 
+function DayExerciseRow({
+  entry,
+  exerciseName,
+  unit,
+  schemes,
+  onSchemeChange,
+  onRemove,
+}: {
+  entry: DayExercise
+  exerciseName: string
+  unit: string
+  schemes: Scheme[]
+  onSchemeChange: (schemeId: number) => void
+  onRemove: () => void
+}) {
+  const list = sortSchemes(schemes)
+  const activeId =
+    entry.schemeId != null && list.some((s) => s.id === entry.schemeId)
+      ? entry.schemeId
+      : (list[0]?.id ?? null)
+  const selected = list.find((s) => s.id === activeId)
+  const weightLabel =
+    selected?.weight != null ? fmtWeight(selected.weight, unit) : 'No weight set'
+
+  return (
+    <li className="day-ex">
+      <div className="day-ex-body">
+        <div className="card-title">{exerciseName}</div>
+        <label className="field">
+          <span>Sets × reps</span>
+          <select
+            value={activeId ?? ''}
+            disabled={list.length === 0}
+            onChange={(e) => onSchemeChange(Number(e.target.value))}
+          >
+            {list.length === 0 && <option value="">No schemes in Log</option>}
+            {list.map((s) => (
+              <option key={s.id} value={s.id}>
+                {schemeLabel(s)}
+                {s.weight != null ? ` · ${fmtWeight(s.weight, unit)}` : ''}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="card-sub muted">{weightLabel}</div>
+      </div>
+      <button className="x" type="button" aria-label="remove" onClick={onRemove}>
+        ×
+      </button>
+    </li>
+  )
+}
+
 export function RegimenDetailView() {
   const { id } = useParams()
   const rId = Number(id)
@@ -88,36 +141,27 @@ export function RegimenDetailView() {
   const [renamingDay, setRenamingDay] = useState<number | null>(null)
   const [dayNameDraft, setDayNameDraft] = useState('')
   const [pickingFor, setPickingFor] = useState<number | null>(null)
+  const [pickQuery, setPickQuery] = useState('')
   const [newDayName, setNewDayName] = useState('')
 
   if (!regimen) return <div className="view" />
 
   const exMap = new Map((exercises ?? []).map((e) => [e.id!, e]))
-  const schemesByEx = new Map<number, typeof schemes>()
+  const schemesByEx = new Map<number, Scheme[]>()
   for (const s of schemes ?? []) {
     const arr = schemesByEx.get(s.exerciseId) ?? []
     arr.push(s)
     schemesByEx.set(s.exerciseId, arr)
   }
 
-  function workingWeight(exerciseId: number): string {
-    const list = schemesByEx.get(exerciseId) ?? []
-    const withWeight = list.filter((s) => s!.weight != null)
-    if (withWeight.length === 0) return 'No weight set'
-    // Prefer the most recently updated scheme with a weight.
-    const best = [...withWeight].sort((a, b) => (b!.updatedAt ?? 0) - (a!.updatedAt ?? 0))[0]!
-    const unit = exMap.get(exerciseId)?.unit || 'kg'
-    return `${schemeLabel(best)} @ ${fmtWeight(best.weight!, unit)}`
-  }
-
   async function addDay() {
     const name = newDayName.trim() || `Day ${(days?.length ?? 0) + 1}`
-    const order = (days?.length ?? 0)
+    const order = days?.length ?? 0
     await db.regimenDays.add({
       regimenId: rId,
       name,
       order,
-      exerciseIds: [],
+      exercises: [],
     })
     setNewDayName('')
   }
@@ -129,18 +173,40 @@ export function RegimenDetailView() {
     setRenamingDay(null)
   }
 
+  function openPicker(dayId: number) {
+    setPickQuery('')
+    setPickingFor(dayId)
+  }
+
+  function closePicker() {
+    setPickingFor(null)
+    setPickQuery('')
+  }
+
   async function addExerciseToDay(dayId: number, exerciseId: number) {
     const day = days?.find((d) => d.id === dayId)
-    if (!day || day.exerciseIds.includes(exerciseId)) return
-    await db.regimenDays.update(dayId, { exerciseIds: [...day.exerciseIds, exerciseId] })
-    setPickingFor(null)
+    if (!day || day.exercises.some((e) => e.exerciseId === exerciseId)) return
+    const list = sortSchemes(schemesByEx.get(exerciseId) ?? [])
+    const entry: DayExercise = { exerciseId, schemeId: list[0]?.id }
+    await db.regimenDays.update(dayId, { exercises: [...day.exercises, entry] })
+    closePicker()
+  }
+
+  async function setDayExerciseScheme(dayId: number, exerciseId: number, schemeId: number) {
+    const day = days?.find((d) => d.id === dayId)
+    if (!day) return
+    await db.regimenDays.update(dayId, {
+      exercises: day.exercises.map((e) =>
+        e.exerciseId === exerciseId ? { ...e, schemeId } : e,
+      ),
+    })
   }
 
   async function removeExerciseFromDay(dayId: number, exerciseId: number) {
     const day = days?.find((d) => d.id === dayId)
     if (!day) return
     await db.regimenDays.update(dayId, {
-      exerciseIds: day.exerciseIds.filter((x) => x !== exerciseId),
+      exercises: day.exercises.filter((e) => e.exerciseId !== exerciseId),
     })
   }
 
@@ -181,7 +247,12 @@ export function RegimenDetailView() {
       </header>
 
       {(days ?? []).map((day, dayIndex) => {
-        const available = (exercises ?? []).filter((e) => !day.exerciseIds.includes(e.id!))
+        const onDay = new Set(day.exercises.map((e) => e.exerciseId))
+        const available = (exercises ?? []).filter((e) => !onDay.has(e.id!))
+        const pickQ = pickQuery.trim().toLowerCase()
+        const filteredAvailable = available.filter(
+          (e) => !pickQ || e.name.toLowerCase().includes(pickQ),
+        )
         const dayCount = days?.length ?? 0
         return (
           <section className="day-block" key={day.id}>
@@ -243,56 +314,78 @@ export function RegimenDetailView() {
             </div>
 
             <ul className="day-ex-list">
-              {day.exerciseIds.map((exId) => {
-                const ex = exMap.get(exId)
+              {day.exercises.map((entry) => {
+                const ex = exMap.get(entry.exerciseId)
                 if (!ex) return null
                 return (
-                  <li key={exId} className="day-ex">
-                    <div>
-                      <div className="card-title">{ex.name}</div>
-                      <div className="card-sub muted">{workingWeight(exId)}</div>
-                    </div>
-                    <button
-                      className="x"
-                      type="button"
-                      aria-label="remove"
-                      onClick={() => removeExerciseFromDay(day.id!, exId)}
-                    >
-                      ×
-                    </button>
-                  </li>
+                  <DayExerciseRow
+                    key={entry.exerciseId}
+                    entry={entry}
+                    exerciseName={ex.name}
+                    unit={ex.unit || 'kg'}
+                    schemes={schemesByEx.get(entry.exerciseId) ?? []}
+                    onSchemeChange={(schemeId) =>
+                      void setDayExerciseScheme(day.id!, entry.exerciseId, schemeId)
+                    }
+                    onRemove={() => void removeExerciseFromDay(day.id!, entry.exerciseId)}
+                  />
                 )
               })}
-              {day.exerciseIds.length === 0 && (
+              {day.exercises.length === 0 && (
                 <li className="muted day-empty">No exercises — pick from your Log.</li>
               )}
             </ul>
 
             {pickingFor === day.id ? (
               <div className="add-pick">
-                {available.map((e) => (
-                  <button
-                    key={e.id}
-                    className="btn block"
-                    type="button"
-                    onClick={() => addExerciseToDay(day.id!, e.id!)}
-                  >
-                    {e.name}
-                  </button>
-                ))}
-                {available.length === 0 && (
-                  <p className="muted">
-                    {(exercises ?? []).length === 0
-                      ? 'Add exercises in Log first.'
-                      : 'All Log exercises are already on this day.'}
+                {available.length > 0 && (
+                  <label className="field grow">
+                    <span>Search Log</span>
+                    <input
+                      type="search"
+                      value={pickQuery}
+                      onChange={(e) => setPickQuery(e.target.value)}
+                      placeholder="Filter all exercises"
+                      autoComplete="off"
+                      autoFocus
+                    />
+                  </label>
+                )}
+                {available.length > 0 && (
+                  <p className="muted add-pick-meta">
+                    {pickQ
+                      ? `${filteredAvailable.length} of ${available.length} available`
+                      : `${available.length} exercise${available.length === 1 ? '' : 's'} from Log`}
                   </p>
                 )}
-                <button className="link-btn" type="button" onClick={() => setPickingFor(null)}>
+                <div className="add-pick-list">
+                  {filteredAvailable.map((e) => (
+                    <button
+                      key={e.id}
+                      className="btn block"
+                      type="button"
+                      onClick={() => addExerciseToDay(day.id!, e.id!)}
+                    >
+                      {e.name}
+                    </button>
+                  ))}
+                  {available.length === 0 && (
+                    <p className="muted">
+                      {(exercises ?? []).length === 0
+                        ? 'Add exercises in Log first.'
+                        : 'All Log exercises are already on this day.'}
+                    </p>
+                  )}
+                  {available.length > 0 && filteredAvailable.length === 0 && (
+                    <p className="muted">No matches in your Log.</p>
+                  )}
+                </div>
+                <button className="link-btn" type="button" onClick={closePicker}>
                   Cancel
                 </button>
               </div>
             ) : (
-              <button className="btn block" type="button" onClick={() => setPickingFor(day.id!)}>
+              <button className="btn block" type="button" onClick={() => openPicker(day.id!)}>
                 + Add exercise
               </button>
             )}

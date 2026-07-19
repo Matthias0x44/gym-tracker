@@ -24,13 +24,20 @@ export interface Regimen {
   createdAt: number
 }
 
+/** An exercise slotted into a regimen day, with its own sets×reps choice. */
+export interface DayExercise {
+  exerciseId: number
+  /** Scheme chosen for this day — independent of whatever is selected in Log. */
+  schemeId?: number
+}
+
 /** One day / session within a regimen (Push, Pull, Week A, …). */
 export interface RegimenDay {
   id?: number
   regimenId: number
   name: string
   order: number
-  exerciseIds: number[]
+  exercises: DayExercise[]
 }
 
 export interface BodyWeight {
@@ -57,6 +64,28 @@ class GymDB extends Dexie {
       regimenDays: '++id, regimenId, order',
       bodyweights: '++id, date, ts',
     })
+    this.version(2)
+      .stores({
+        exercises: '++id, name',
+        schemes: '++id, exerciseId, [exerciseId+sets+reps]',
+        regimens: '++id, name',
+        regimenDays: '++id, regimenId, order',
+        bodyweights: '++id, date, ts',
+      })
+      .upgrade(async (tx) => {
+        await tx
+          .table('regimenDays')
+          .toCollection()
+          .modify((day: Record<string, unknown>) => {
+            const legacyIds = day.exerciseIds
+            if (Array.isArray(legacyIds) && !Array.isArray(day.exercises)) {
+              day.exercises = legacyIds.map((exerciseId: number) => ({ exerciseId }))
+            } else if (!Array.isArray(day.exercises)) {
+              day.exercises = []
+            }
+            delete day.exerciseIds
+          })
+      })
   }
 }
 
@@ -69,6 +98,10 @@ export function todayISO(d = new Date()): string {
 
 export function schemeLabel(s: Pick<Scheme, 'sets' | 'reps'>): string {
   return `${s.sets}×${s.reps}`
+}
+
+export function sortSchemes<T extends Pick<Scheme, 'sets' | 'reps'>>(list: T[]): T[] {
+  return list.slice().sort((a, b) => a.sets - b.sets || a.reps - b.reps)
 }
 
 export async function ensureSeed() {

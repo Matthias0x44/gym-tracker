@@ -68,10 +68,10 @@ function ExerciseRow({ exerciseId }: { exerciseId: number }) {
     const days = await db.regimenDays.toArray()
     await Promise.all(
       days
-        .filter((d) => d.exerciseIds.includes(exerciseId))
+        .filter((d) => d.exercises.some((e) => e.exerciseId === exerciseId))
         .map((d) =>
           db.regimenDays.update(d.id!, {
-            exerciseIds: d.exerciseIds.filter((id) => id !== exerciseId),
+            exercises: d.exercises.filter((e) => e.exerciseId !== exerciseId),
           }),
         ),
     )

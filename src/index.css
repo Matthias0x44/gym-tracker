@@ -354,6 +354,18 @@ select {
 .day-actions {
   display: flex;
   gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.day-actions .link-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.search-field {
+  margin-bottom: 16px;
 }
 
 .day-ex-list {

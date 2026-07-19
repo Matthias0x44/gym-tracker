@@ -147,6 +147,18 @@ export function RegimenDetailView() {
   async function deleteDay(dayId: number) {
     if (!confirm('Delete this day?')) return
     await db.regimenDays.delete(dayId)
+    const remaining = (days ?? []).filter((d) => d.id !== dayId)
+    await Promise.all(remaining.map((d, i) => db.regimenDays.update(d.id!, { order: i })))
+  }
+
+  async function moveDay(dayId: number, direction: -1 | 1) {
+    const list = [...(days ?? [])]
+    const index = list.findIndex((d) => d.id === dayId)
+    const target = index + direction
+    if (index < 0 || target < 0 || target >= list.length) return
+    const [item] = list.splice(index, 1)
+    list.splice(target, 0, item!)
+    await Promise.all(list.map((d, i) => db.regimenDays.update(d.id!, { order: i })))
   }
 
   async function deleteRegimen() {
@@ -168,8 +180,9 @@ export function RegimenDetailView() {
         </div>
       </header>
 
-      {(days ?? []).map((day) => {
+      {(days ?? []).map((day, dayIndex) => {
         const available = (exercises ?? []).filter((e) => !day.exerciseIds.includes(e.id!))
+        const dayCount = days?.length ?? 0
         return (
           <section className="day-block" key={day.id}>
             <div className="day-head">
@@ -189,6 +202,28 @@ export function RegimenDetailView() {
                 <>
                   <h2>{day.name}</h2>
                   <div className="day-actions">
+                    {dayCount > 1 && (
+                      <>
+                        <button
+                          className="link-btn"
+                          type="button"
+                          disabled={dayIndex === 0}
+                          aria-label="Move day up"
+                          onClick={() => void moveDay(day.id!, -1)}
+                        >
+                          ↑
+                        </button>
+                        <button
+                          className="link-btn"
+                          type="button"
+                          disabled={dayIndex === dayCount - 1}
+                          aria-label="Move day down"
+                          onClick={() => void moveDay(day.id!, 1)}
+                        >
+                          ↓
+                        </button>
+                      </>
+                    )}
                     <button
                       className="link-btn"
                       type="button"

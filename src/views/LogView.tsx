@@ -170,6 +170,7 @@ function ExerciseRow({ exerciseId }: { exerciseId: number }) {
 export default function LogView() {
   const exercises = useLiveQuery(() => db.exercises.orderBy('name').toArray())
   const [name, setName] = useState('')
+  const [query, setQuery] = useState('')
 
   async function addExercise() {
     const n = name.trim()
@@ -177,6 +178,9 @@ export default function LogView() {
     await createExercise(n)
     setName('')
   }
+
+  const q = query.trim().toLowerCase()
+  const filtered = (exercises ?? []).filter((ex) => !q || ex.name.toLowerCase().includes(q))
 
   return (
     <div className="view">
@@ -200,14 +204,33 @@ export default function LogView() {
         </button>
       </div>
 
+      {(exercises ?? []).length > 0 && (
+        <label className="field grow search-field">
+          <span>Search</span>
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Filter exercises"
+            autoComplete="off"
+          />
+        </label>
+      )}
+
       <div className="ex-list">
-        {(exercises ?? []).map((ex) => (
+        {filtered.map((ex) => (
           <ExerciseRow key={ex.id} exerciseId={ex.id!} />
         ))}
         {(exercises ?? []).length === 0 && (
           <div className="empty">
             <p>No exercises yet.</p>
             <p className="muted">Add a lift to start tracking weights.</p>
+          </div>
+        )}
+        {(exercises ?? []).length > 0 && filtered.length === 0 && (
+          <div className="empty">
+            <p>No matches.</p>
+            <p className="muted">Try a different search.</p>
           </div>
         )}
       </div>

@@ -3,12 +3,13 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
 import { ensureSeed } from './db'
-import { initCloudSync } from './sync'
+import { cloudConfigured, initCloudSync } from './sync'
 
 async function boot() {
   const sync = await initCloudSync()
-  // Only seed demo lifts when this device has no data and cloud did not supply any.
-  if (sync !== 'pulled') {
+  // Never seed demo lifts when cloud sync is on — that polluted D1 with presets.
+  // Only seed a brand-new offline browser with no cloud token.
+  if (!cloudConfigured() && (sync === 'skipped' || sync === 'error')) {
     await ensureSeed()
   }
 

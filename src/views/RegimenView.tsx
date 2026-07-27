@@ -12,7 +12,7 @@ import {
 import { fmtWeight } from '../format'
 
 function collapseStorageKey(regimenId: number): string {
-  return `gym-tracker-day-collapse-${regimenId}`
+  return `gym-tracker-day-collapse-v2-${regimenId}`
 }
 
 function readCollapsedDayIds(regimenId: number): number[] | null {
@@ -264,10 +264,9 @@ export function RegimenDetailView() {
   if (!regimen) return <div className="view" />
 
   const dayList = days ?? []
+  // Default expanded; only collapse after the user taps the day ▾ control.
   const storedCollapsed = readCollapsedDayIds(rId)
-  const collapsed = new Set(
-    storedCollapsed ?? (dayList.length > 1 ? dayList.map((d) => d.id!) : []),
-  )
+  const collapsed = new Set(storedCollapsed ?? [])
   void collapseVersion
 
   function setCollapsed(next: Set<number>) {
@@ -479,22 +478,14 @@ export function RegimenDetailView() {
                 </div>
               ) : (
                 <>
-                  <button
-                    className="day-toggle"
-                    type="button"
-                    aria-expanded={!isCollapsed}
-                    onClick={() => toggleDayCollapsed(day.id!)}
-                  >
-                    <span className="day-chevron" aria-hidden>
-                      {isCollapsed ? '▸' : '▾'}
-                    </span>
-                    <span className="day-toggle-text">
-                      <span className="day-toggle-name">{day.name}</span>
-                      <span className="muted day-toggle-meta">
+                  <div className="day-title-wrap">
+                    <h2>{day.name}</h2>
+                    {isCollapsed && (
+                      <p className="muted day-collapsed-meta">
                         {exCount} exercise{exCount === 1 ? '' : 's'}
-                      </span>
-                    </span>
-                  </button>
+                      </p>
+                    )}
+                  </div>
                   <div className="day-actions">
                     {dayCount > 1 && (
                       <>
@@ -530,6 +521,15 @@ export function RegimenDetailView() {
                     </button>
                     <button className="link-btn danger-link" type="button" onClick={() => deleteDay(day.id!)}>
                       Delete
+                    </button>
+                    <button
+                      className="day-collapse-btn"
+                      type="button"
+                      aria-expanded={!isCollapsed}
+                      aria-label={isCollapsed ? 'Expand day' : 'Collapse day'}
+                      onClick={() => toggleDayCollapsed(day.id!)}
+                    >
+                      {isCollapsed ? '▸' : '▾'}
                     </button>
                   </div>
                 </>

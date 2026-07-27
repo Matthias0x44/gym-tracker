@@ -393,43 +393,18 @@ select {
   margin-bottom: 0;
 }
 
-.day-toggle {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  background: none;
-  border: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  padding: 0;
-  cursor: pointer;
+.day-title-wrap {
   flex: 1;
   min-width: 0;
 }
 
-.day-chevron {
-  color: var(--muted);
-  font-size: 16px;
-  line-height: 1.4;
-  width: 1em;
-  flex-shrink: 0;
-}
-
-.day-toggle-text {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.day-toggle-name {
+.day-title-wrap h2 {
+  margin: 0;
   font-size: 1.15rem;
-  font-weight: 700;
-  letter-spacing: -0.01em;
 }
 
-.day-toggle-meta {
+.day-collapsed-meta {
+  margin: 2px 0 0;
   font-size: 13px;
 }
 
@@ -439,6 +414,28 @@ select {
   align-items: center;
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+
+.day-collapse-btn {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--accent);
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+  font-family: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.day-collapse-btn:active {
+  transform: scale(0.96);
 }
 
 .day-actions .link-btn:disabled {

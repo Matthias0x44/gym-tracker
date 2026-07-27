@@ -1,16 +1,52 @@
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db, schemeLabel, sortSchemes, type DayExercise, type Scheme } from '../db'
+import {
+  db,
+  schemeLabel,
+  sortSchemes,
+  type DayExercise,
+  type RegimenDay,
+  type Scheme,
+} from '../db'
 import { fmtWeight } from '../format'
 
+async function cloneRegimen(sourceName: string, sourceDays: RegimenDay[]): Promise<number> {
+  const createdAt = Date.now()
+  const newId = await db.regimens.add({
+    name: `${sourceName} copy`,
+    createdAt,
+  })
+  if (sourceDays.length > 0) {
+    await db.regimenDays.bulkAdd(
+      sourceDays.map((d) => ({
+        regimenId: newId,
+        name: d.name,
+        order: d.order,
+        exercises: d.exercises.map((e) => ({ ...e })),
+      })),
+    )
+  } else {
+    await db.regimenDays.add({
+      regimenId: newId,
+      name: 'Day 1',
+      order: 0,
+      exercises: [],
+    })
+  }
+  return newId
+}
+
 export default function RegimenListView() {
+  const navigate = useNavigate()
   const regimens = useLiveQuery(async () => {
     const rows = await db.regimens.toArray()
     return rows.sort((a, b) => b.createdAt - a.createdAt)
   })
   const days = useLiveQuery(() => db.regimenDays.toArray())
   const [name, setName] = useState('')
+  const [renamingId, setRenamingId] = useState<number | null>(null)
+  const [renameDraft, setRenameDraft] = useState('')
 
   const dayCount = new Map<number, number>()
   for (const d of days ?? []) {
@@ -29,6 +65,24 @@ export default function RegimenListView() {
       exercises: [],
     })
     setName('')
+  }
+
+  async function renameRegimen(id: number) {
+    const n = renameDraft.trim()
+    if (!n) return
+    await db.regimens.update(id, { name: n })
+    setRenamingId(null)
+  }
+
+  async function duplicateRegimen(sourceId: number) {
+    const source = (regimens ?? []).find((r) => r.id === sourceId)
+    if (!source) return
+    const sourceDays = (days ?? [])
+      .filter((d) => d.regimenId === sourceId)
+      .slice()
+      .sort((a, b) => a.order - b.order)
+    const newId = await cloneRegimen(source.name, sourceDays)
+    navigate(`/regimen/${newId}`)
   }
 
   return (
@@ -55,12 +109,52 @@ export default function RegimenListView() {
 
       <div className="card-list">
         {(regimens ?? []).map((r) => (
-          <Link to={`/regimen/${r.id}`} className="card" key={r.id}>
-            <div className="card-title">{r.name}</div>
-            <div className="card-sub muted">
-              {dayCount.get(r.id!) ?? 0} day{(dayCount.get(r.id!) ?? 0) === 1 ? '' : 's'}
-            </div>
-          </Link>
+          <div className="card regimen-card" key={r.id}>
+            {renamingId === r.id ? (
+              <div className="log-form compact">
+                <input
+                  value={renameDraft}
+                  onChange={(e) => setRenameDraft(e.target.value)}
+                  autoFocus
+                  onKeyDown={(e) => e.key === 'Enter' && void renameRegimen(r.id!)}
+                />
+                <button className="btn primary" type="button" onClick={() => void renameRegimen(r.id!)}>
+                  Save
+                </button>
+                <button className="link-btn" type="button" onClick={() => setRenamingId(null)}>
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <>
+                <Link to={`/regimen/${r.id}`} className="regimen-card-main">
+                  <div className="card-title">{r.name}</div>
+                  <div className="card-sub muted">
+                    {dayCount.get(r.id!) ?? 0} day{(dayCount.get(r.id!) ?? 0) === 1 ? '' : 's'}
+                  </div>
+                </Link>
+                <div className="regimen-card-actions">
+                  <button
+                    className="link-btn"
+                    type="button"
+                    onClick={() => {
+                      setRenamingId(r.id!)
+                      setRenameDraft(r.name)
+                    }}
+                  >
+                    Rename
+                  </button>
+                  <button
+                    className="link-btn"
+                    type="button"
+                    onClick={() => void duplicateRegimen(r.id!)}
+                  >
+                    Duplicate
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         ))}
         {(regimens ?? []).length === 0 && (
           <div className="empty">
@@ -140,6 +234,8 @@ export function RegimenDetailView() {
 
   const [renamingDay, setRenamingDay] = useState<number | null>(null)
   const [dayNameDraft, setDayNameDraft] = useState('')
+  const [renamingRegimen, setRenamingRegimen] = useState(false)
+  const [regimenNameDraft, setRegimenNameDraft] = useState('')
   const [pickingFor, setPickingFor] = useState<number | null>(null)
   const [pickQuery, setPickQuery] = useState('')
   const [newDayName, setNewDayName] = useState('')
@@ -227,6 +323,19 @@ export function RegimenDetailView() {
     await Promise.all(list.map((d, i) => db.regimenDays.update(d.id!, { order: i })))
   }
 
+  async function renameRegimen() {
+    const name = regimenNameDraft.trim()
+    if (!name) return
+    await db.regimens.update(rId, { name })
+    setRenamingRegimen(false)
+  }
+
+  async function duplicateRegimen() {
+    if (!regimen) return
+    const newId = await cloneRegimen(regimen.name, [...(days ?? [])])
+    navigate(`/regimen/${newId}`)
+  }
+
   async function deleteRegimen() {
     if (!confirm(`Delete regimen "${regimen!.name}"?`)) return
     await db.regimenDays.where('regimenId').equals(rId).delete()
@@ -240,9 +349,43 @@ export function RegimenDetailView() {
         <button className="back" type="button" onClick={() => navigate('/regimen')} aria-label="back">
           ‹
         </button>
-        <div>
-          <h1>{regimen.name}</h1>
-          <p className="muted">{days?.length ?? 0} days</p>
+        <div className="regimen-head-main">
+          {renamingRegimen ? (
+            <div className="log-form compact">
+              <input
+                value={regimenNameDraft}
+                onChange={(e) => setRegimenNameDraft(e.target.value)}
+                autoFocus
+                onKeyDown={(e) => e.key === 'Enter' && void renameRegimen()}
+              />
+              <button className="btn primary" type="button" onClick={() => void renameRegimen()}>
+                Save
+              </button>
+              <button className="link-btn" type="button" onClick={() => setRenamingRegimen(false)}>
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <>
+              <h1>{regimen.name}</h1>
+              <p className="muted">{days?.length ?? 0} days</p>
+              <div className="regimen-actions">
+                <button
+                  className="link-btn"
+                  type="button"
+                  onClick={() => {
+                    setRegimenNameDraft(regimen.name)
+                    setRenamingRegimen(true)
+                  }}
+                >
+                  Rename
+                </button>
+                <button className="link-btn" type="button" onClick={() => void duplicateRegimen()}>
+                  Duplicate
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </header>
 

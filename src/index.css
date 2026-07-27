@@ -152,6 +152,35 @@ h2 {
   font-size: 14px;
 }
 
+.regimen-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.regimen-card-main {
+  text-decoration: none;
+  color: inherit;
+  min-width: 0;
+}
+
+.regimen-card-actions,
+.regimen-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.regimen-head-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.regimen-head-main .log-form.compact {
+  width: 100%;
+}
+
 .empty {
   text-align: center;
   padding: 40px 0;

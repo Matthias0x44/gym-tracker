@@ -389,6 +389,50 @@ select {
   margin-bottom: 12px;
 }
 
+.day-block.collapsed .day-head {
+  margin-bottom: 0;
+}
+
+.day-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  padding: 0;
+  cursor: pointer;
+  flex: 1;
+  min-width: 0;
+}
+
+.day-chevron {
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1.4;
+  width: 1em;
+  flex-shrink: 0;
+}
+
+.day-toggle-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.day-toggle-name {
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.day-toggle-meta {
+  font-size: 13px;
+}
+
 .day-actions {
   display: flex;
   gap: 12px;

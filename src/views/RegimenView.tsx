@@ -11,6 +11,26 @@ import {
 } from '../db'
 import { fmtWeight } from '../format'
 
+function collapseStorageKey(regimenId: number): string {
+  return `gym-tracker-day-collapse-${regimenId}`
+}
+
+function readCollapsedDayIds(regimenId: number): number[] | null {
+  try {
+    const raw = localStorage.getItem(collapseStorageKey(regimenId))
+    if (raw == null) return null
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return null
+    return parsed.filter((n): n is number => typeof n === 'number')
+  } catch {
+    return null
+  }
+}
+
+function writeCollapsedDayIds(regimenId: number, ids: number[]) {
+  localStorage.setItem(collapseStorageKey(regimenId), JSON.stringify(ids))
+}
+
 async function cloneRegimen(sourceName: string, sourceDays: RegimenDay[]): Promise<number> {
   const createdAt = Date.now()
   const newId = await db.regimens.add({
@@ -239,8 +259,36 @@ export function RegimenDetailView() {
   const [pickingFor, setPickingFor] = useState<number | null>(null)
   const [pickQuery, setPickQuery] = useState('')
   const [newDayName, setNewDayName] = useState('')
+  const [collapseVersion, setCollapseVersion] = useState(0)
 
   if (!regimen) return <div className="view" />
+
+  const dayList = days ?? []
+  const storedCollapsed = readCollapsedDayIds(rId)
+  const collapsed = new Set(
+    storedCollapsed ?? (dayList.length > 1 ? dayList.map((d) => d.id!) : []),
+  )
+  void collapseVersion
+
+  function setCollapsed(next: Set<number>) {
+    writeCollapsedDayIds(rId, [...next])
+    setCollapseVersion((v) => v + 1)
+  }
+
+  function toggleDayCollapsed(dayId: number) {
+    const next = new Set(collapsed)
+    if (next.has(dayId)) next.delete(dayId)
+    else next.add(dayId)
+    setCollapsed(next)
+  }
+
+  function collapseAllDays() {
+    setCollapsed(new Set(dayList.map((d) => d.id!)))
+  }
+
+  function expandAllDays() {
+    setCollapsed(new Set())
+  }
 
   const exMap = new Map((exercises ?? []).map((e) => [e.id!, e]))
   const schemesByEx = new Map<number, Scheme[]>()
@@ -272,6 +320,11 @@ export function RegimenDetailView() {
   function openPicker(dayId: number) {
     setPickQuery('')
     setPickingFor(dayId)
+    if (collapsed.has(dayId)) {
+      const next = new Set(collapsed)
+      next.delete(dayId)
+      setCollapsed(next)
+    }
   }
 
   function closePicker() {
@@ -368,7 +421,7 @@ export function RegimenDetailView() {
           ) : (
             <>
               <h1>{regimen.name}</h1>
-              <p className="muted">{days?.length ?? 0} days</p>
+              <p className="muted">{dayList.length} days</p>
               <div className="regimen-actions">
                 <button
                   className="link-btn"
@@ -383,22 +436,34 @@ export function RegimenDetailView() {
                 <button className="link-btn" type="button" onClick={() => void duplicateRegimen()}>
                   Duplicate
                 </button>
+                {dayList.length > 1 && (
+                  <>
+                    <button className="link-btn" type="button" onClick={collapseAllDays}>
+                      Collapse all
+                    </button>
+                    <button className="link-btn" type="button" onClick={expandAllDays}>
+                      Expand all
+                    </button>
+                  </>
+                )}
               </div>
             </>
           )}
         </div>
       </header>
 
-      {(days ?? []).map((day, dayIndex) => {
+      {dayList.map((day, dayIndex) => {
         const onDay = new Set(day.exercises.map((e) => e.exerciseId))
         const available = (exercises ?? []).filter((e) => !onDay.has(e.id!))
         const pickQ = pickQuery.trim().toLowerCase()
         const filteredAvailable = available.filter(
           (e) => !pickQ || e.name.toLowerCase().includes(pickQ),
         )
-        const dayCount = days?.length ?? 0
+        const dayCount = dayList.length
+        const isCollapsed = collapsed.has(day.id!)
+        const exCount = day.exercises.length
         return (
-          <section className="day-block" key={day.id}>
+          <section className={`day-block${isCollapsed ? ' collapsed' : ''}`} key={day.id}>
             <div className="day-head">
               {renamingDay === day.id ? (
                 <div className="log-form compact">
@@ -414,7 +479,22 @@ export function RegimenDetailView() {
                 </div>
               ) : (
                 <>
-                  <h2>{day.name}</h2>
+                  <button
+                    className="day-toggle"
+                    type="button"
+                    aria-expanded={!isCollapsed}
+                    onClick={() => toggleDayCollapsed(day.id!)}
+                  >
+                    <span className="day-chevron" aria-hidden>
+                      {isCollapsed ? '▸' : '▾'}
+                    </span>
+                    <span className="day-toggle-text">
+                      <span className="day-toggle-name">{day.name}</span>
+                      <span className="muted day-toggle-meta">
+                        {exCount} exercise{exCount === 1 ? '' : 's'}
+                      </span>
+                    </span>
+                  </button>
                   <div className="day-actions">
                     {dayCount > 1 && (
                       <>
@@ -456,81 +536,85 @@ export function RegimenDetailView() {
               )}
             </div>
 
-            <ul className="day-ex-list">
-              {day.exercises.map((entry) => {
-                const ex = exMap.get(entry.exerciseId)
-                if (!ex) return null
-                return (
-                  <DayExerciseRow
-                    key={entry.exerciseId}
-                    entry={entry}
-                    exerciseName={ex.name}
-                    unit={ex.unit || 'kg'}
-                    schemes={schemesByEx.get(entry.exerciseId) ?? []}
-                    onSchemeChange={(schemeId) =>
-                      void setDayExerciseScheme(day.id!, entry.exerciseId, schemeId)
-                    }
-                    onRemove={() => void removeExerciseFromDay(day.id!, entry.exerciseId)}
-                  />
-                )
-              })}
-              {day.exercises.length === 0 && (
-                <li className="muted day-empty">No exercises — pick from your Log.</li>
-              )}
-            </ul>
+            {!isCollapsed && (
+              <>
+                <ul className="day-ex-list">
+                  {day.exercises.map((entry) => {
+                    const ex = exMap.get(entry.exerciseId)
+                    if (!ex) return null
+                    return (
+                      <DayExerciseRow
+                        key={entry.exerciseId}
+                        entry={entry}
+                        exerciseName={ex.name}
+                        unit={ex.unit || 'kg'}
+                        schemes={schemesByEx.get(entry.exerciseId) ?? []}
+                        onSchemeChange={(schemeId) =>
+                          void setDayExerciseScheme(day.id!, entry.exerciseId, schemeId)
+                        }
+                        onRemove={() => void removeExerciseFromDay(day.id!, entry.exerciseId)}
+                      />
+                    )
+                  })}
+                  {day.exercises.length === 0 && (
+                    <li className="muted day-empty">No exercises — pick from your Log.</li>
+                  )}
+                </ul>
 
-            {pickingFor === day.id ? (
-              <div className="add-pick">
-                {available.length > 0 && (
-                  <label className="field grow">
-                    <span>Search Log</span>
-                    <input
-                      type="search"
-                      value={pickQuery}
-                      onChange={(e) => setPickQuery(e.target.value)}
-                      placeholder="Filter all exercises"
-                      autoComplete="off"
-                      autoFocus
-                    />
-                  </label>
-                )}
-                {available.length > 0 && (
-                  <p className="muted add-pick-meta">
-                    {pickQ
-                      ? `${filteredAvailable.length} of ${available.length} available`
-                      : `${available.length} exercise${available.length === 1 ? '' : 's'} from Log`}
-                  </p>
-                )}
-                <div className="add-pick-list">
-                  {filteredAvailable.map((e) => (
-                    <button
-                      key={e.id}
-                      className="btn block"
-                      type="button"
-                      onClick={() => addExerciseToDay(day.id!, e.id!)}
-                    >
-                      {e.name}
+                {pickingFor === day.id ? (
+                  <div className="add-pick">
+                    {available.length > 0 && (
+                      <label className="field grow">
+                        <span>Search Log</span>
+                        <input
+                          type="search"
+                          value={pickQuery}
+                          onChange={(e) => setPickQuery(e.target.value)}
+                          placeholder="Filter all exercises"
+                          autoComplete="off"
+                          autoFocus
+                        />
+                      </label>
+                    )}
+                    {available.length > 0 && (
+                      <p className="muted add-pick-meta">
+                        {pickQ
+                          ? `${filteredAvailable.length} of ${available.length} available`
+                          : `${available.length} exercise${available.length === 1 ? '' : 's'} from Log`}
+                      </p>
+                    )}
+                    <div className="add-pick-list">
+                      {filteredAvailable.map((e) => (
+                        <button
+                          key={e.id}
+                          className="btn block"
+                          type="button"
+                          onClick={() => addExerciseToDay(day.id!, e.id!)}
+                        >
+                          {e.name}
+                        </button>
+                      ))}
+                      {available.length === 0 && (
+                        <p className="muted">
+                          {(exercises ?? []).length === 0
+                            ? 'Add exercises in Log first.'
+                            : 'All Log exercises are already on this day.'}
+                        </p>
+                      )}
+                      {available.length > 0 && filteredAvailable.length === 0 && (
+                        <p className="muted">No matches in your Log.</p>
+                      )}
+                    </div>
+                    <button className="link-btn" type="button" onClick={closePicker}>
+                      Cancel
                     </button>
-                  ))}
-                  {available.length === 0 && (
-                    <p className="muted">
-                      {(exercises ?? []).length === 0
-                        ? 'Add exercises in Log first.'
-                        : 'All Log exercises are already on this day.'}
-                    </p>
-                  )}
-                  {available.length > 0 && filteredAvailable.length === 0 && (
-                    <p className="muted">No matches in your Log.</p>
-                  )}
-                </div>
-                <button className="link-btn" type="button" onClick={closePicker}>
-                  Cancel
-                </button>
-              </div>
-            ) : (
-              <button className="btn block" type="button" onClick={() => openPicker(day.id!)}>
-                + Add exercise
-              </button>
+                  </div>
+                ) : (
+                  <button className="btn block" type="button" onClick={() => openPicker(day.id!)}>
+                    + Add exercise
+                  </button>
+                )}
+              </>
             )}
           </section>
         )
